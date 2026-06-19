@@ -1,255 +1,267 @@
-# DataHub
+# DataHub Governance Automation
 
-https://github.com/acryldata/datahub-helm
+A complete DataHub deployment with automated data governance on Kubernetes.
 
-[somaya@somaya-pc DataHub]$ helm repo add datahub https://helm.datahubproject.io/
-"datahub" has been added to your repositories
-[somaya@somaya-pc DataHub]$ kubectl create namespace datahub
-namespace/datahub created
-[somaya@somaya-pc DataHub]$ kubectl create secret generic mysql-secrets --from-literal=mysql-root-password=<add root password> -n datahub
-secret/mysql-secrets created
-[somaya@somaya-pc DataHub]$ kubectl create secret generic neo4j-secrets --from-literal=neo4j-password=<add your password> -n datahub
-secret/neo4j-secrets created
-[somaya@somaya-pc DataHub]$ helm install prerequisites datahub/datahub-prerequisites \
+## What I Built
+
+**Governance Automation** — A Kubernetes CronJob that automatically finds all datasets without owners in DataHub and tags them with `needs-owner` for follow-up.
+
+**Key Features:**
+- Automated owner assignment enforcement
+- Runs on a schedule (nightly in production, every 5 minutes in dev)
+- Idempotent — safe to run multiple times
+- Dry-run mode for testing
+- Comprehensive logging and error handling
+
+## How to Run Locally
+
+### Prerequisites
+
+- **Minikube** (or any Kubernetes cluster)
+- **Helm 3.x**
+- **kubectl**
+- **Docker** (for image building and pushing)
+- **Python 3.9+** (for local testing)
+
+### 1. Start Minikube
+
+```bash
+minikube start --cpus=6 --memory=12288 --driver=docker
+```
+
+### 2. Deploy DataHub
+
+```bash
+helm repo add datahub https://helm.datahubproject.io/
+helm repo update
+
+# Create namespace and secrets
+kubectl create namespace datahub
+kubectl create secret generic mysql-secrets \
+  --from-literal=mysql-root-password=datahub \
+  -n datahub
+
+# Deploy prerequisites (OpenSearch, Kafka, MySQL)
+helm install prerequisites datahub/datahub-prerequisites \
   --namespace datahub
-NAME: prerequisites
-LAST DEPLOYED: Thu Jun 18 13:26:24 2026
-NAMESPACE: datahub
-STATUS: deployed
-REVISION: 1
-DESCRIPTION: Install complete
-TEST SUITE: None
-[somaya@somaya-pc DataHub]$ kubectl get pods -n datahub
-NAME                               READY   STATUS              RESTARTS   AGE
-opensearch-cluster-master-0        0/1     Init:0/2            0          14s
-prerequisites-kafka-controller-0   0/1     Init:0/1            0          14s
-prerequisites-mysql-0              0/1     ContainerCreating   0          14s
-[somaya@somaya-pc DataHub]$ kubectl get pods -n datahub -w
-NAME                               READY   STATUS              RESTARTS   AGE
-opensearch-cluster-master-0        0/1     Init:0/2            0          20s
-prerequisites-kafka-controller-0   0/1     Init:0/1            0          20s
-prerequisites-mysql-0              0/1     ContainerCreating   0          20s
 
-
+# Wait for all pods to be Running
 kubectl get pods -n datahub -w
-NAME                               READY   STATUS    RESTARTS   AGE
-opensearch-cluster-master-0        1/1     Running   0          13m
-prerequisites-kafka-controller-0   1/1     Running   0          13m
-prerequisites-mysql-0              1/1     Running   0          13m
 
+# Deploy DataHub
 helm install datahub datahub/datahub \
-  --namespace datahub
+  --namespace datahub \
+  --timeout 20m
+```
 
-kubectl get pods -n datahub -w
-NAME                                            READY   STATUS              RESTARTS   AGE
-datahub-acryl-datahub-actions-74f54c488-bzw8g   0/1     ContainerCreating   0          10s
-datahub-datahub-frontend-97bc74b4d-447km        0/1     ContainerCreating   0          10s
-datahub-datahub-gms-68f84c8c68-44s2d            0/1     ContainerCreating   0          10s
-datahub-system-update-59p4c                     0/1     Completed           0          117s
-datahub-system-update-nonblk-wh6dg              1/1     Running             0          10s
-opensearch-cluster-master-0                     1/1     Running             0          28m
-prerequisites-kafka-controller-0                1/1     Running             0          28m
-prerequisites-mysql-0                           1/1     Running             0          28m
-datahub-datahub-frontend-97bc74b4d-447km        0/1     ErrImagePull        0          18s
-datahub-datahub-frontend-97bc74b4d-447km        0/1     ImagePullBackOff    0          32s
-^C[somaya@somaya-pc DataHub]$ kubectl describe pod -n datahub datahub-datahub-frontend-97bc74b4d-447km
-Name:             datahub-datahub-frontend-97bc74b4d-447km
-Namespace:        datahub
-Priority:         0
-Service Account:  datahub-app-sa
-Node:             minikube/192.168.49.2
-Start Time:       Thu, 18 Jun 2026 13:54:38 +0300
-Labels:           app.kubernetes.io/instance=datahub
-                  app.kubernetes.io/name=datahub-frontend
-                  pod-template-hash=97bc74b4d
-Annotations:      <none>
-Status:           Pending
-IP:               10.244.0.9
-IPs:
-  IP:           10.244.0.9
-Controlled By:  ReplicaSet/datahub-datahub-frontend-97bc74b4d
-Containers:
-  datahub-frontend:
-    Container ID:   
-    Image:          docker.io/acryldata/datahub-frontend-react:v1.6.0
-    Image ID:       
-    Ports:          9002/TCP (http), 4318/TCP (jmx), 4319/TCP (prometheus)
-    Host Ports:     0/TCP (http), 0/TCP (jmx), 0/TCP (prometheus)
-    State:          Waiting
-      Reason:       ImagePullBackOff
-    Ready:          False
-    Restart Count:  0
-    Limits:
-      memory:  1400Mi
-    Requests:
-      cpu:      100m
-      memory:   512Mi
-    Liveness:   http-get http://:http/admin delay=60s timeout=1s period=30s #success=1 #failure=4
-    Readiness:  http-get http://:http/admin delay=60s timeout=1s period=30s #success=1 #failure=4
-    Environment:
-      DATAHUB_GMS_BASE_PATH_ENABLED:                   false
-      ENTITY_VERSIONING_ENABLED:                       false
-      ENABLE_PROMETHEUS:                               true
-      DATAHUB_GMS_HOST:                                datahub-datahub-gms
-      DATAHUB_GMS_PORT:                                8080
-      DATAHUB_SECRET:                                  <set to the key 'datahub.gms.secret' in secret 'datahub-gms-secret'>  Optional: false
-      DATAHUB_APP_VERSION:                             1.6.0
-      DATAHUB_PLAY_MEM_BUFFER_SIZE:                    10MB
-      DATAHUB_ANALYTICS_ENABLED:                       true
-      KAFKA_BOOTSTRAP_SERVER:                          prerequisites-kafka:9092
-      ENFORCE_VALID_EMAIL:                             true
-      KAFKA_PRODUCER_COMPRESSION_TYPE:                 none
-      KAFKA_PRODUCER_MAX_REQUEST_SIZE:                 5242880
-      KAFKA_CONSUMER_MAX_PARTITION_FETCH_BYTES:        5242880
-      KAFKA_PROPERTIES_PARTITION_ASSIGNMENT_STRATEGY:  org.apache.kafka.clients.consumer.CooperativeStickyAssignor
-      ELASTIC_CLIENT_HOST:                             opensearch-cluster-master
-      ELASTIC_CLIENT_PORT:                             9200
-      ELASTIC_CLIENT_USE_SSL:                          false
-      DATAHUB_TRACKING_TOPIC:                          DataHubUsageEvent_v1
-      METADATA_SERVICE_AUTH_ENABLED:                   true
-      DATAHUB_SYSTEM_CLIENT_ID:                        __datahub_system
-      DATAHUB_SYSTEM_CLIENT_SECRET:                    <set to the key 'system_client_secret' in secret 'datahub-auth-secrets'>  Optional: false
-      AUTH_SESSION_TTL_HOURS:                          24
-      AUTH_COOKIE_SAME_SITE:                           LAX
-      AUTH_COOKIE_SECURE:                              false
-      FRONTEND_GRACEFUL_SHUTDOWN_ENABLED:              false
-      FRONTEND_BEFORE_SERVICE_UNBIND_TIMEOUT:          10s
-      FRONTEND_SERVICE_REQUESTS_DONE_TIMEOUT:          65s
-      FRONTEND_SERVICE_STOP_TIMEOUT:                   15s
-    Mounts:
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-hwtrt (ro)
-Conditions:
-  Type                        Status
-  PodReadyToStartContainers   True 
-  Initialized                 True 
-  Ready                       False 
-  ContainersReady             False 
-  PodScheduled                True 
-Volumes:
-  kube-api-access-hwtrt:
-    Type:                    Projected (a volume that contains injected data from multiple sources)
-    TokenExpirationSeconds:  3607
-    ConfigMapName:           kube-root-ca.crt
-    Optional:                false
-    DownwardAPI:             true
-QoS Class:                   Burstable
-Node-Selectors:              <none>
-Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
-                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
-Events:
-  Type     Reason     Age                From               Message
-  ----     ------     ----               ----               -------
-  Normal   Scheduled  58s                default-scheduler  Successfully assigned datahub/datahub-datahub-frontend-97bc74b4d-447km to minikube
-  Warning  Failed     41s                kubelet            Failed to pull image "docker.io/acryldata/datahub-frontend-react:v1.6.0": Error response from daemon: Head "https://registry-1.docker.io/v2/acryldata/datahub-frontend-react/manifests/v1.6.0": Get "https://auth.docker.io/token?scope=repository%3Aacryldata%2Fdatahub-frontend-react%3Apull&service=registry.docker.io": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
-  Warning  Failed     41s                kubelet            Error: ErrImagePull
-  Normal   BackOff    40s                kubelet            Back-off pulling image "docker.io/acryldata/datahub-frontend-react:v1.6.0"
-  Warning  Failed     40s                kubelet            Error: ImagePullBackOff
-  Normal   Pulling    26s (x2 over 56s)  kubelet            Pulling image "docker.io/acryldata/datahub-frontend-react:v1.6.0"
-[somaya@somaya-pc DataHub]$ ^C
+**For detailed setup:** See [docs/deployment.md](docs/deployment.md)
 
-helm install datahub datahub/datahub   --namespace datahub   --timeout 20m
-NAME: datahub
-LAST DEPLOYED: Thu Jun 18 13:52:48 2026
-NAMESPACE: datahub
-STATUS: deployed
-REVISION: 1
-DESCRIPTION: Install complete
-TEST SUITE: None
-[somaya@somaya-pc DataHub]$ 
+### 3. Ingest Sample Data
 
-kubectl get pods -n datahub -w
-NAME                                            READY   STATUS              RESTARTS   AGE
-datahub-acryl-datahub-actions-74f54c488-bzw8g   0/1     ContainerCreating   0          4m8s
-datahub-datahub-frontend-97bc74b4d-447km        0/1     ImagePullBackOff    0          4m8s
-datahub-datahub-gms-68f84c8c68-44s2d            0/1     ContainerCreating   0          4m8s
-datahub-system-update-59p4c                     0/1     Completed           0          5m55s
-datahub-system-update-nonblk-wh6dg              0/1     Completed           0          4m8s
-opensearch-cluster-master-0                     1/1     Running             0          32m
-prerequisites-kafka-controller-0                1/1     Running             0          32m
-prerequisites-mysql-0                           1/1     Running             0          32m
+```bash
+# Port-forward to GMS
+kubectl port-forward svc/datahub-datahub-gms 8080:8080 -n datahub &
 
-minikube ssh
-Linux minikube 5.14.0-701.el9.x86_64 #1 SMP PREEMPT_DYNAMIC Mon May 4 09:10:57 UTC 2026 x86_64
+# Install datahub CLI
+pip install 'acryl-datahub[demo-data]'
 
-The programs included with the Debian GNU/Linux system are free software;
-the exact distribution terms for each program are described in the
-individual files in /usr/share/doc/*/copyright.
+# Generate access token in UI first:
+# 1. kubectl port-forward svc/datahub-datahub-frontend 9002:9002 -n datahub
+# 2. Go to http://localhost:9002, login (datahub/datahub)
+# 3. Profile → Settings → Access Tokens → Generate New Token
+# 4. Copy token and use below
 
-Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
-permitted by applicable law.
-docker@minikube:~$ docker login
+# Ingest demo data
+datahub ingest -c - <<EOF
+source:
+  type: demo-data
+  config: {}
+sink:
+  type: datahub-rest
+  config:
+    server: http://localhost:8080
+    token: "<your-access-token>"
+EOF
+```
 
-USING WEB-BASED LOGIN
+**For detailed guide:** See [docs/ingestion-and-governance.md](docs/ingestion-and-governance.md)
 
-i Info → To sign in with credentials on the command line, use 'docker login -u <username>'
-         
+### 4. Create Governance Secret
 
-Your one-time device confirmation code is: GMRK-TBDP
-Press ENTER to open your browser or submit your device code here: https://login.docker.com/activate
+```bash
+# Create the secret in Kubernetes
+kubectl create secret generic governance-secret \
+  --from-literal=DATAHUB_TOKEN="your-access-token" \
+  -n datahub-jobs
+```
 
-Waiting for authentication in the browser…
-exit
-^Clogin canceled
-docker@minikube:~$ docker pull acryldata/datahub-frontend-react:v1.6.0
-v1.6.0: Pulling from acryldata/datahub-frontend-react
-a5bfa7101982: Already exists 
-b5d920927575: Already exists 
-3e1295fc6e22: Already exists 
-1d53393b78f0: Already exists 
-9201e51fe8c1: Already exists 
-7c6e71c1fdfd: Already exists 
-4b14fbe9f208: Already exists 
-8d99fd8fea9c: Already exists 
-5f460b97a17e: Already exists 
-cdea145aa115: Already exists 
-4df5fafa2a01: Already exists 
-12c3db7f21b8: Already exists 
-d3b24c7dac48: Already exists 
-b49c09b6ee51: Downloading [==================================>                ]  82.71MB/118.7MB
-6cb599a19b84: Waiting 
-8447a12ba234: Waiting 
-635e5ed3d04e: Waiting 
-29b6a971058b: Waiting 
-bd9ddc54bea9: Waiting 
+Or manually edit the placeholder:
 
-taHub]kubectl delete pod -n datahub datahub-datahub-frontend-97bc74b4d-447kmkm
-pod "datahub-datahub-frontend-97bc74b4d-447km" deleted from datahub namespace
-^C[somaya@somaya-pc DataHub]$ kubectget pods -n datahub -wkm
-NAME                                            READY   STATUS        RESTARTS   AGE
-datahub-acryl-datahub-actions-74f54c488-bzw8g   1/1     Running       0          17m
-datahub-datahub-frontend-97bc74b4d-447km        0/1     Terminating   0          17m
-datahub-datahub-frontend-97bc74b4d-hfqd4        0/1     Running       0          5m54s
-datahub-datahub-gms-68f84c8c68-44s2d            1/1     Running       0          17m
-datahub-system-update-59p4c                     0/1     Completed     0          19m
-datahub-system-update-nonblk-wh6dg              0/1     Completed     0          17m
-opensearch-cluster-master-0                     1/1     Running       0          45m
-prerequisites-kafka-controller-0                1/1     Running       0          45m
-prerequisites-mysql-0                           1/1     Running       0          45m
-datahub-datahub-frontend-97bc74b4d-447km        0/1     Error         0          18m
-datahub-datahub-frontend-97bc74b4d-447km        0/1     Error         0          18m
-datahub-datahub-frontend-97bc74b4d-447km        0/1     Error         0          18m
-^C[somaya@somaya-pc DataHub]$ kubectl get pods -n datahub -w
-NAME                                            READY   STATUS      RESTARTS   AGE
-datahub-acryl-datahub-actions-74f54c488-bzw8g   1/1     Running     0          18m
-datahub-datahub-frontend-97bc74b4d-hfqd4        0/1     Running     0          6m18s
-datahub-datahub-gms-68f84c8c68-44s2d            1/1     Running     0          18m
-datahub-system-update-59p4c                     0/1     Completed   0          19m
-datahub-system-update-nonblk-wh6dg              0/1     Completed   0          18m
-opensearch-cluster-master-0                     1/1     Running     0          46m
-prerequisites-kafka-controller-0                1/1     Running     0          46m
-prerequisites-mysql-0                           1/1     Running     0          46m
+```bash
+# Edit the local file (NOT committed to git)
+cat > k8s/base/governance/secret.yaml <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: governance-secret
+  namespace: datahub-jobs
+type: Opaque
+stringData:
+  DATAHUB_TOKEN: "your-actual-token-here"
+EOF
+```
 
- kubectl get pods -n datahub -w
-NAME                                            READY   STATUS      RESTARTS   AGE
-datahub-acryl-datahub-actions-74f54c488-bzw8g   1/1     Running     0          19m
-datahub-datahub-frontend-97bc74b4d-hfqd4        1/1     Running     0          7m22s
-datahub-datahub-gms-68f84c8c68-44s2d            1/1     Running     0          19m
-datahub-system-update-59p4c                     0/1     Completed   0          20m
-datahub-system-update-nonblk-wh6dg              0/1     Completed   0          19m
-opensearch-cluster-master-0                     1/1     Running     0          47m
-prerequisites-kafka-controller-0                1/1     Running     0          47m
-prerequisites-mysql-0                           1/1     Running     0          47m
-^C[somaya@somaya-pc DataHub]kubectl port-forward svc/datahub-datahub-frontend 9002:9002 -n datahubub
-Forwarding from 127.0.0.1:9002 -> 9002
-Forwarding from [::1]:9002 -> 9002
+### 5. Build and Push Docker Image
 
+```bash
+# Build image
+docker build -t <docker-username>/governance-job:latest src/governance/
+
+# Push to Docker Hub
+docker login  # If not already logged in
+docker push <docker-username>/governance-job:latest
+```
+
+Update the image reference in `k8s/base/governance/cronjob.yaml`:
+
+```yaml
+containers:
+- name: governance
+  image: <docker-username>/governance-job:latest  # Update this line
+```
+
+### 6. Deploy Governance Job
+
+```bash
+# Deploy dev overlay (runs every 5 minutes)
+kubectl apply -k k8s/overlays/dev/
+
+# Check status
+kubectl get cronjobs -n datahub-jobs
+kubectl get pods -n datahub-jobs
+
+# View logs
+kubectl logs -n datahub-jobs -l job-name --tail=50
+```
+
+### 7. Test Locally
+
+```bash
+# Set token as environment variable
+export DATAHUB_TOKEN="your-access-token"
+
+# Run dry-run (preview changes)
+cd src/governance
+python governance.py --dry-run
+
+# Run with actual tagging
+python governance.py
+```
+
+## Key Design Decisions
+
+### Idempotency
+The governance script checks if a dataset is already tagged before tagging it. Running it multiple times produces the same result — no duplicate tags.
+
+### Pagination
+All dataset queries paginate in batches of 100 to handle large catalogs without memory issues.
+
+### Dry-run Mode
+Both scripts support `--dry-run` to preview changes without modifying anything. Perfect for testing.
+
+### Kustomize Overlays
+- **Base:** Standard production schedule (nightly at midnight)
+- **Dev overlay:** Runs every 5 minutes for rapid testing
+
+Easily switch environments:
+
+```bash
+# Dev (every 5 minutes)
+kubectl apply -k k8s/overlays/dev/
+
+# Production (nightly)
+kubectl apply -k k8s/overlays/prod/
+```
+
+### Non-root Containers
+Dockerfile creates a non-root `govadmin` user for security.
+
+### Secrets Pattern
+- Actual secrets are NOT committed to git (.gitignore)
+- Secret files contain placeholders only
+- Created manually or via CI/CD before deployment
+
+## What I Would Improve
+
+- Add Sealed Secrets for encrypted secrets in git
+- Add Prometheus metrics (datasets tagged per run, errors)
+- Add alerts (Slack webhook on job failure)
+- Unit tests for GraphQL queries
+- Helm chart for the jobs themselves
+- Database for job run history and auditing
+- Multi-environment support (dev/staging/prod)
+
+## Known Limitations
+
+- Images built and pushed manually — no automated CI/CD pipeline yet
+- Only tested with demo data — real production data sources would need additional testing
+- Single node Minikube setup — production uses multi-node clusters
+- Governance script currently tags datasets without owners — could extend to other policies
+- No role-based access control (RBAC) beyond Kubernetes default
+
+## Documentation
+
+- [Deployment Guide](docs/deployment.md) — Detailed DataHub setup
+- [Ingestion & Governance Guide](docs/ingestion-and-governance.md) — Complete testing workflow
+- [Docker Registry Guide](docs/docker-registry.md) — Image building and pushing
+
+## Quick Reference
+
+```bash
+# Check cluster status
+kubectl get pods -n datahub
+kubectl get pods -n datahub-jobs
+
+# View logs
+kubectl logs -n datahub-jobs <pod-name>
+
+# Trigger job manually
+kubectl create job --from=cronjob/governance-job governance-manual -n datahub-jobs
+
+# Port-forward to UI
+kubectl port-forward svc/datahub-datahub-frontend 9002:9002 -n datahub
+
+# Port-forward to GMS
+kubectl port-forward svc/datahub-datahub-gms 8080:8080 -n datahub
+```
+
+## Repository Structure
+
+```
+DataHub/
+├── src/governance/           # Governance automation script
+│   ├── governance.py         # Main script
+│   ├── requirements.txt       # Python dependencies
+│   └── Dockerfile            # Container image
+├── k8s/                       # Kubernetes manifests
+│   ├── base/                  # Base configs
+│   │   └── governance/
+│   │       ├── cronjob.yaml
+│   │       ├── configmap.yaml
+│   │       ├── secret.yaml    # ⚠️ In .gitignore (local only)
+│   │       └── kustomization.yaml
+│   └── overlays/
+│       └── dev/               # Dev environment (5-min schedule)
+├── docs/                      # Documentation
+│   ├── deployment.md
+│   ├── ingestion-and-governance.md
+│   └── docker-registry.md
+└── README.md
+```
+
+## Resources
+
+- [DataHub Documentation](https://datahubproject.io/docs/)
+- [DataHub Helm Charts](https://github.com/acryldata/datahub-helm)
+- [Kubernetes Documentation](https://kubernetes.io/docs/)
+- [Kustomize Guide](https://kustomize.io/)
