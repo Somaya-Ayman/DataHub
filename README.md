@@ -213,7 +213,6 @@ Dockerfile creates a non-root `govadmin` user for security.
 
 - [Deployment Guide](docs/deployment.md) — Detailed DataHub setup
 - [Ingestion & Governance Guide](docs/ingestion-and-governance.md) — Complete testing workflow
-- [Docker Registry Guide](docs/docker-registry.md) — Image building and pushing
 
 ## Quick Reference
 
@@ -255,7 +254,6 @@ DataHub/
 ├── docs/                      # Documentation
 │   ├── deployment.md
 │   ├── ingestion-and-governance.md
-│   └── docker-registry.md
 └── README.md
 ```
 
