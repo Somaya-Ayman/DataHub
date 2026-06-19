@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: governance-job
+  namespace: datahub-jobs
+spec:
+  schedule: "0 0 * * *"        # runs every day at midnight
+  concurrencyPolicy: Forbid    # don't run if previous job still running
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3            # retry up to 3 times on failure
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: governance
+              image: somaya189/governance-job:latest
+              imagePullPolicy: Always
+              envFrom:
+                - configMapRef:
+                    name: governance-config
+                - secretRef:
+                    name: governance-secret
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "256Mi"

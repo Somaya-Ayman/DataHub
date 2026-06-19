@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: governance-config
+  namespace: datahub-jobs
+data:
+  DATAHUB_GMS_URL: "http://datahub-datahub-gms.datahub.svc.cluster.local:8080"
